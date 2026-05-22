@@ -1,0 +1,74 @@
+#root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #ffffff;
+  color: #1f2937;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+}
+
+.app__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 1.25rem;
+  border-bottom: 1px solid #e5e7eb;
+  background: #ffffff;
+}
+
+.app__title-group {
+  min-width: 0;
+}
+
+.app__title {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.app__subtitle {
+  margin: 0.2rem 0 0;
+  font-size: 0.8125rem;
+  color: #6b7280;
+}
+
+.app__floor-toggle {
+  display: inline-flex;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.app__floor-btn {
+  padding: 0.45rem 0.9rem;
+  border: none;
+  background: #ffffff;
+  color: #374151;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.app__floor-btn + .app__floor-btn {
+  border-left: 1px solid #d1d5db;
+}
+
+.app__floor-btn:hover {
+  background: #f9fafb;
+}
+
+.app__floor-btn--active {
+  background: #111827;
+  color: #ffffff;
+}
+
+.app__floor-btn--active:hover {
+  background: #111827;
+}
+
+.app__main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}

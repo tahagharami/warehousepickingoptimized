@@ -1,0 +1,23 @@
+.warehouse-map {
+  flex: 1;
+  min-height: 0;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.warehouse-map__transform-wrapper {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.warehouse-map__svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: #ffffff;
+  cursor: grab;
+}
+
+.warehouse-map__svg:active {
+  cursor: grabbing;
+}

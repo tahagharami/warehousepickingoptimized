@@ -1,0 +1,149 @@
+.picking-panel {
+  width: 280px;
+  min-width: 280px;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid #e5e7eb;
+  background: #f9fafb;
+  overflow-y: auto;
+}
+
+.picking-panel__title {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  border-bottom: 1px solid #e5e7eb;
+  color: #111827;
+}
+
+.picking-panel__input-group {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.picking-panel__textarea {
+  width: 100%;
+  padding: 0.5rem;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-family: "SF Mono", "Fira Code", monospace;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  resize: vertical;
+  background: #ffffff;
+  color: #111827;
+}
+
+.picking-panel__textarea:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+}
+
+.picking-panel__error {
+  margin: 0.4rem 0 0;
+  font-size: 0.75rem;
+  color: #dc2626;
+}
+
+.picking-panel__buttons {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.picking-panel__btn {
+  flex: 1;
+  padding: 0.45rem 0.75rem;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.picking-panel__btn--primary {
+  background: #111827;
+  color: #ffffff;
+}
+
+.picking-panel__btn--primary:hover {
+  background: #1f2937;
+}
+
+.picking-panel__btn--secondary {
+  background: #e5e7eb;
+  color: #374151;
+}
+
+.picking-panel__btn--secondary:hover {
+  background: #d1d5db;
+}
+
+.picking-panel__route {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.picking-panel__route-title {
+  margin: 0;
+  padding: 0.75rem 1rem 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #111827;
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.picking-panel__route-distance {
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: #6b7280;
+}
+
+.picking-panel__stop-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.picking-panel__stop {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 1rem;
+  font-size: 0.8125rem;
+  border-bottom: 1px solid #f3f4f6;
+  cursor: default;
+  transition: background 0.1s;
+}
+
+.picking-panel__stop:hover,
+.picking-panel__stop--hover {
+  background: #fef3c7;
+}
+
+.picking-panel__stop-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #ef4444;
+  color: #ffffff;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.picking-panel__stop-id {
+  font-family: "SF Mono", "Fira Code", monospace;
+  color: #374151;
+}
