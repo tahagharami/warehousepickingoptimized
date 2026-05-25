@@ -46,6 +46,18 @@ export function dxfToSvg(
   return { x, y };
 }
 
+export function svgToDxf(
+  svgX: number,
+  svgY: number,
+  floor: WarehouseFloor,
+): { x: number; y: number } {
+  const cfg = FLOOR_CONFIGS[floor];
+  const [minX, minY, maxX, maxY] = cfg.clipBBox;
+  const x = (svgX / cfg.svgWidth) * (maxX - minX) + minX;
+  const y = (svgY / cfg.svgHeight) * (maxY - minY) + minY;
+  return { x, y };
+}
+
 export function getFloorSvgDimensions(floor: WarehouseFloor) {
   const cfg = FLOOR_CONFIGS[floor];
   return { width: cfg.svgWidth, height: cfg.svgHeight };

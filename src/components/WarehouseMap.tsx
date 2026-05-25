@@ -1,13 +1,15 @@
-import { useMemo, useRef, useCallback } from "react";
+import { useMemo, useRef, useCallback, useState } from "react";
 import { TransformComponent, TransformWrapper } from "react-zoom-pan-pinch";
 import {
   getFloorData,
   type WarehouseFloor,
 } from "../data/warehouseDataExactFromDXF";
 import { warehouseSvgs } from "../data/warehouseSvg";
-import { dxfToSvg, getFloorSvgDimensions } from "../engine/coordTransform";
+import { dxfToSvg, svgToDxf, getFloorSvgDimensions } from "../engine/coordTransform";
 import type { OptimizedRoute } from "../engine/optimizer";
 import "./WarehouseMap.css";
+
+export type LocationCorrection = { x: number; y: number };
 
 const LOCATION_RADIUS = 4;
 const PALLET_SIZE = 8;
@@ -54,6 +56,9 @@ type WarehouseMapProps = {
   showNormalRoute?: boolean;
   highlightedLocations: Set<string>;
   onLocationClick?: (locationId: string) => void;
+  editMode?: boolean;
+  locationCorrections?: Record<string, LocationCorrection>;
+  onLocationMove?: (locationId: string, dxfX: number, dxfY: number) => void;
 };
 
 export function WarehouseMap({
@@ -63,21 +68,29 @@ export function WarehouseMap({
   showNormalRoute,
   highlightedLocations,
   onLocationClick,
+  editMode,
+  locationCorrections,
+  onLocationMove,
 }: WarehouseMapProps) {
   const { locations, graph } = getFloorData(floor);
   const svgDims = getFloorSvgDimensions(floor);
   const svgRef = useRef<SVGSVGElement>(null);
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [dragPos, setDragPos] = useState<{ svgX: number; svgY: number } | null>(null);
 
   const svgBackground = warehouseSvgs[floor];
 
-  // Transform all locations to SVG coordinates
+  // Transform all locations to SVG coordinates, applying corrections
   const transformedLocations = useMemo((): TransformedLocation[] => {
     return (locations as readonly { id: string; x: number; y: number; originalLabel: string; rack?: string; slot?: string; type: string }[]).map((loc) => {
-      const { x, y } = dxfToSvg(loc.x, loc.y, floor);
+      const correction = locationCorrections?.[loc.id];
+      const dxfX = correction ? correction.x : loc.x;
+      const dxfY = correction ? correction.y : loc.y;
+      const { x, y } = dxfToSvg(dxfX, dxfY, floor);
       return {
         id: loc.id,
-        x: loc.x,
-        y: loc.y,
+        x: dxfX,
+        y: dxfY,
         svgX: x,
         svgY: y,
         originalLabel: loc.originalLabel,
@@ -86,7 +99,7 @@ export function WarehouseMap({
         type: loc.type,
       };
     });
-  }, [locations, floor]);
+  }, [locations, floor, locationCorrections]);
 
   // Group by rack
   const rackGroups = useMemo((): RackGroup[] => {
@@ -208,10 +221,60 @@ export function WarehouseMap({
 
   const handleLocationClick = useCallback(
     (id: string) => {
-      onLocationClick?.(id);
+      if (!editMode) {
+        onLocationClick?.(id);
+      }
     },
-    [onLocationClick],
+    [onLocationClick, editMode],
   );
+
+  const screenToSvg = useCallback(
+    (clientX: number, clientY: number): { svgX: number; svgY: number } | null => {
+      const svg = svgRef.current;
+      if (!svg) return null;
+      const pt = svg.createSVGPoint();
+      pt.x = clientX;
+      pt.y = clientY;
+      const ctm = svg.getScreenCTM();
+      if (!ctm) return null;
+      const svgPt = pt.matrixTransform(ctm.inverse());
+      return { svgX: svgPt.x, svgY: svgPt.y };
+    },
+    [],
+  );
+
+  const handleDragStart = useCallback(
+    (e: React.MouseEvent, locId: string) => {
+      if (!editMode) return;
+      e.stopPropagation();
+      e.preventDefault();
+      setDragId(locId);
+      const pos = screenToSvg(e.clientX, e.clientY);
+      if (pos) setDragPos(pos);
+    },
+    [editMode, screenToSvg],
+  );
+
+  const handleDragMove = useCallback(
+    (e: React.MouseEvent) => {
+      if (!dragId) return;
+      const pos = screenToSvg(e.clientX, e.clientY);
+      if (pos) setDragPos(pos);
+    },
+    [dragId, screenToSvg],
+  );
+
+  const handleDragEnd = useCallback(() => {
+    if (!dragId || !dragPos) {
+      setDragId(null);
+      setDragPos(null);
+      return;
+    }
+    const dxf = svgToDxf(dragPos.svgX, dragPos.svgY, floor);
+    onLocationMove?.(dragId, dxf.x, dxf.y);
+    setDragId(null);
+    setDragPos(null);
+  }, [dragId, dragPos, floor, onLocationMove]);
 
   // Parse SVG string and extract just the inner content (skip the outer <svg> tag)
   const svgInnerContent = useMemo(() => {
@@ -230,6 +293,7 @@ export function WarehouseMap({
         centerOnInit
         limitToBounds={false}
         wheel={{ step: 0.12 }}
+        panning={{ excluded: ["loc-draggable"] }}
       >
         <TransformComponent
           wrapperClass="warehouse-map__transform-wrapper"
@@ -241,6 +305,9 @@ export function WarehouseMap({
             className="warehouse-map__svg"
             viewBox={`0 0 ${svgDims.width} ${svgDims.height}`}
             preserveAspectRatio="xMidYMid meet"
+            onMouseMove={editMode ? handleDragMove : undefined}
+            onMouseUp={editMode ? handleDragEnd : undefined}
+            onMouseLeave={editMode ? handleDragEnd : undefined}
           >
             {/* White background */}
             <rect x="0" y="0" width={svgDims.width} height={svgDims.height} fill="#ffffff" />
@@ -305,17 +372,30 @@ export function WarehouseMap({
               {regularLocations.map((loc) => {
                 const isHighlighted = highlightedLocations.has(loc.id);
                 const isOnRoute = route?.stops.some((s) => s.locationId === loc.id);
+                const isDragging = dragId === loc.id;
+                const cx = isDragging && dragPos ? dragPos.svgX : loc.svgX;
+                const cy = isDragging && dragPos ? dragPos.svgY : loc.svgY;
+                const isCorrected = locationCorrections?.[loc.id] !== undefined;
                 return (
-                  <g key={loc.id} onClick={() => handleLocationClick(loc.id)} style={{ cursor: "pointer" }}>
+                  <g
+                    key={loc.id}
+                    className={editMode ? "loc-draggable" : undefined}
+                    onClick={() => handleLocationClick(loc.id)}
+                    onMouseDown={editMode ? (e) => handleDragStart(e, loc.id) : undefined}
+                    style={{ cursor: editMode ? (isDragging ? "grabbing" : "grab") : "pointer" }}
+                  >
+                    {editMode && isCorrected && (
+                      <circle cx={cx} cy={cy} r={LOCATION_RADIUS * 2.5} fill="none" stroke="#f59e0b" strokeWidth="1" strokeDasharray="2 2" opacity="0.8" />
+                    )}
                     <circle
-                      cx={loc.svgX} cy={loc.svgY}
-                      r={isHighlighted || isOnRoute ? LOCATION_RADIUS * 1.5 : LOCATION_RADIUS}
-                      fill={isOnRoute ? "#ef4444" : isHighlighted ? "#f59e0b" : getRackColor(loc.rack ?? "default")}
-                      stroke={isHighlighted || isOnRoute ? "#ffffff" : "none"}
-                      strokeWidth={isHighlighted || isOnRoute ? "1" : "0"}
-                      opacity={isHighlighted || isOnRoute ? 1 : 0.7}
+                      cx={cx} cy={cy}
+                      r={isDragging ? LOCATION_RADIUS * 2 : isHighlighted || isOnRoute ? LOCATION_RADIUS * 1.5 : LOCATION_RADIUS}
+                      fill={isDragging ? "#f59e0b" : isOnRoute ? "#ef4444" : isHighlighted ? "#f59e0b" : getRackColor(loc.rack ?? "default")}
+                      stroke={isDragging ? "#ffffff" : isHighlighted || isOnRoute ? "#ffffff" : "none"}
+                      strokeWidth={isDragging || isHighlighted || isOnRoute ? "1" : "0"}
+                      opacity={isDragging ? 1 : isHighlighted || isOnRoute ? 1 : 0.7}
                     />
-                    <title>{loc.id} — {loc.originalLabel}</title>
+                    <title>{loc.id} — {loc.originalLabel}{isCorrected ? " (corrected)" : ""}</title>
                   </g>
                 );
               })}
@@ -326,21 +406,34 @@ export function WarehouseMap({
               {palletLocations.map((loc) => {
                 const isHighlighted = highlightedLocations.has(loc.id);
                 const isOnRoute = route?.stops.some((s) => s.locationId === loc.id);
-                const size = isHighlighted || isOnRoute ? PALLET_SIZE * 1.5 : PALLET_SIZE;
+                const isDragging = dragId === loc.id;
+                const cx = isDragging && dragPos ? dragPos.svgX : loc.svgX;
+                const cy = isDragging && dragPos ? dragPos.svgY : loc.svgY;
+                const isCorrected = locationCorrections?.[loc.id] !== undefined;
+                const size = isDragging ? PALLET_SIZE * 2 : isHighlighted || isOnRoute ? PALLET_SIZE * 1.5 : PALLET_SIZE;
                 return (
-                  <g key={loc.id} onClick={() => handleLocationClick(loc.id)} style={{ cursor: "pointer" }}>
+                  <g
+                    key={loc.id}
+                    className={editMode ? "loc-draggable" : undefined}
+                    onClick={() => handleLocationClick(loc.id)}
+                    onMouseDown={editMode ? (e) => handleDragStart(e, loc.id) : undefined}
+                    style={{ cursor: editMode ? (isDragging ? "grabbing" : "grab") : "pointer" }}
+                  >
+                    {editMode && isCorrected && (
+                      <rect x={cx - size} y={cy - size} width={size * 2} height={size * 2} fill="none" stroke="#f59e0b" strokeWidth="1" strokeDasharray="2 2" opacity="0.8" rx="2" />
+                    )}
                     <rect
-                      x={loc.svgX - size / 2}
-                      y={loc.svgY - size / 2}
+                      x={cx - size / 2}
+                      y={cy - size / 2}
                       width={size}
                       height={size}
-                      fill={isOnRoute ? "#ef4444" : isHighlighted ? "#f59e0b" : loc.id.startsWith("IP") ? "#8b5cf6" : "#06b6d4"}
-                      stroke={isHighlighted || isOnRoute ? "#ffffff" : "none"}
-                      strokeWidth={isHighlighted || isOnRoute ? "1" : "0"}
-                      opacity={isHighlighted || isOnRoute ? 1 : 0.75}
+                      fill={isDragging ? "#f59e0b" : isOnRoute ? "#ef4444" : isHighlighted ? "#f59e0b" : loc.id.startsWith("IP") ? "#8b5cf6" : "#06b6d4"}
+                      stroke={isDragging ? "#ffffff" : isHighlighted || isOnRoute ? "#ffffff" : "none"}
+                      strokeWidth={isDragging || isHighlighted || isOnRoute ? "1" : "0"}
+                      opacity={isDragging ? 1 : isHighlighted || isOnRoute ? 1 : 0.75}
                       rx="1"
                     />
-                    <title>{loc.id} — {loc.originalLabel}</title>
+                    <title>{loc.id} — {loc.originalLabel}{isCorrected ? " (corrected)" : ""}</title>
                   </g>
                 );
               })}
