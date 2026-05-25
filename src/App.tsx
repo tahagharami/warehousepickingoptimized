@@ -1,5 +1,5 @@
-import { useState, useCallback, useEffect } from "react";
-import { WarehouseMap, type LocationCorrection } from "./components/WarehouseMap";
+import { useState, useCallback, useEffect, useMemo } from "react";
+import { WarehouseMap } from "./components/WarehouseMap";
 import { PickingPanel } from "./components/PickingPanel";
 import type { WarehouseFloor } from "./data/warehouseDataExactFromDXF";
 import {
@@ -11,20 +11,25 @@ import {
   computeSequentialRoute,
   type OptimizedRoute,
 } from "./engine/optimizer";
+import { LocationEditorPanel, type WarehouseEdits, type EditTool, type LocationEdit } from "./components/LocationEditorPanel";
 import "./App.css";
 
-const CORRECTIONS_KEY = "warehouse-location-corrections";
+const EDITS_KEY = "warehouse-location-edits";
 
-function loadCorrections(): Record<string, Record<string, LocationCorrection>> {
+function loadEdits(): Record<string, WarehouseEdits> {
   try {
-    const raw = localStorage.getItem(CORRECTIONS_KEY);
+    const raw = localStorage.getItem(EDITS_KEY);
     if (raw) return JSON.parse(raw);
   } catch { /* ignore */ }
   return {};
 }
 
-function saveCorrections(data: Record<string, Record<string, LocationCorrection>>) {
-  localStorage.setItem(CORRECTIONS_KEY, JSON.stringify(data));
+function saveEdits(data: Record<string, WarehouseEdits>) {
+  localStorage.setItem(EDITS_KEY, JSON.stringify(data));
+}
+
+function emptyFloorEdits(): WarehouseEdits {
+  return { modified: {}, added: [], deleted: [], rackColors: {} };
 }
 
 function App() {
@@ -36,87 +41,288 @@ function App() {
     new Set(),
   );
   const [editMode, setEditMode] = useState(false);
-  const [allCorrections, setAllCorrections] = useState<Record<string, Record<string, LocationCorrection>>>(loadCorrections);
+  const [allEdits, setAllEdits] = useState<Record<string, WarehouseEdits>>(loadEdits);
+  const [activeTool, setActiveTool] = useState<EditTool>("select");
+  const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
 
   const floorKey = `floor-${floor}`;
-  const floorCorrections = allCorrections[floorKey] ?? {};
-  const correctionCount = Object.keys(floorCorrections).length;
+  const floorEdits = allEdits[floorKey] ?? emptyFloorEdits();
 
   useEffect(() => {
-    saveCorrections(allCorrections);
-  }, [allCorrections]);
+    saveEdits(allEdits);
+  }, [allEdits]);
+
+  const updateFloorEdits = useCallback(
+    (updater: (prev: WarehouseEdits) => WarehouseEdits) => {
+      setAllEdits((prev) => {
+        const key = `floor-${floor}`;
+        const current = prev[key] ?? emptyFloorEdits();
+        return { ...prev, [key]: updater(current) };
+      });
+    },
+    [floor],
+  );
 
   const handleLocationMove = useCallback(
     (locationId: string, dxfX: number, dxfY: number) => {
-      setAllCorrections((prev) => {
-        const key = `floor-${floor}`;
-        const floorData = { ...(prev[key] ?? {}) };
-        floorData[locationId] = { x: dxfX, y: dxfY };
-        return { ...prev, [key]: floorData };
+      updateFloorEdits((prev) => {
+        const existing = prev.modified[locationId] ?? {};
+        return {
+          ...prev,
+          modified: {
+            ...prev.modified,
+            [locationId]: { ...existing, x: dxfX, y: dxfY },
+          },
+        };
+      });
+      // Also update added locations if it was one
+      updateFloorEdits((prev) => {
+        const addedIdx = prev.added.findIndex((a) => a.id === locationId);
+        if (addedIdx >= 0) {
+          const updated = [...prev.added];
+          updated[addedIdx] = { ...updated[addedIdx], x: dxfX, y: dxfY };
+          return { ...prev, added: updated };
+        }
+        return prev;
       });
     },
-    [floor],
+    [updateFloorEdits],
   );
 
-  const handleResetCorrections = useCallback(() => {
-    setAllCorrections((prev) => {
-      const key = `floor-${floor}`;
+  const handleDeleteLocation = useCallback(
+    (locationId: string) => {
+      updateFloorEdits((prev) => {
+        // If it was added in this session, just remove it from added
+        const addedIdx = prev.added.findIndex((a) => a.id === locationId);
+        if (addedIdx >= 0) {
+          const updated = [...prev.added];
+          updated.splice(addedIdx, 1);
+          const newMod = { ...prev.modified };
+          delete newMod[locationId];
+          return { ...prev, added: updated, modified: newMod };
+        }
+        // Otherwise mark as deleted
+        const newDeleted = prev.deleted.includes(locationId) ? prev.deleted : [...prev.deleted, locationId];
+        const newMod = { ...prev.modified };
+        delete newMod[locationId];
+        return { ...prev, deleted: newDeleted, modified: newMod };
+      });
+      if (selectedLocationId === locationId) setSelectedLocationId(null);
+    },
+    [updateFloorEdits, selectedLocationId],
+  );
+
+  const handleAddLocation = useCallback(
+    (loc: LocationEdit) => {
+      updateFloorEdits((prev) => ({
+        ...prev,
+        added: [...prev.added, loc],
+      }));
+      setSelectedLocationId(loc.id);
+    },
+    [updateFloorEdits],
+  );
+
+  const handleUpdateLocationProps = useCallback(
+    (locationId: string, updates: Partial<LocationEdit>) => {
+      updateFloorEdits((prev) => {
+        // Check if it's an added location
+        const addedIdx = prev.added.findIndex((a) => a.id === locationId);
+        if (addedIdx >= 0) {
+          const updated = [...prev.added];
+          const oldLoc = updated[addedIdx];
+          const newLoc = { ...oldLoc, ...updates };
+          // If ID changed, update the ID
+          if (updates.id && updates.id !== locationId) {
+            newLoc.id = updates.id;
+          }
+          updated[addedIdx] = newLoc;
+          return { ...prev, added: updated };
+        }
+        // It's a base location — store modification
+        const existing = prev.modified[locationId] ?? {};
+        const newMod = { ...prev.modified, [locationId]: { ...existing, ...updates } };
+        // If ID changed, we need to move the key
+        if (updates.id && updates.id !== locationId) {
+          newMod[updates.id] = newMod[locationId];
+          delete newMod[locationId];
+        }
+        return { ...prev, modified: newMod };
+      });
+      // If ID changed, update selected
+      if (updates.id && updates.id !== locationId) {
+        setSelectedLocationId(updates.id);
+      }
+    },
+    [updateFloorEdits],
+  );
+
+  const handleUndeleteLocation = useCallback(
+    (locationId: string) => {
+      updateFloorEdits((prev) => ({
+        ...prev,
+        deleted: prev.deleted.filter((id) => id !== locationId),
+      }));
+    },
+    [updateFloorEdits],
+  );
+
+  const handleSetRackColor = useCallback(
+    (rackId: string, color: string | null) => {
+      updateFloorEdits((prev) => {
+        const rc = { ...prev.rackColors };
+        if (color === null) {
+          delete rc[rackId];
+        } else {
+          rc[rackId] = color;
+        }
+        return { ...prev, rackColors: rc };
+      });
+    },
+    [updateFloorEdits],
+  );
+
+  const handleResetAllEdits = useCallback(() => {
+    setAllEdits((prev) => {
       const next = { ...prev };
-      delete next[key];
+      delete next[`floor-${floor}`];
       return next;
     });
+    setSelectedLocationId(null);
   }, [floor]);
 
-  const handleResetSingle = useCallback(
-    (locationId: string) => {
-      setAllCorrections((prev) => {
-        const key = `floor-${floor}`;
-        const floorData = { ...(prev[key] ?? {}) };
-        delete floorData[locationId];
-        if (Object.keys(floorData).length === 0) {
-          const next = { ...prev };
-          delete next[key];
-          return next;
-        }
-        return { ...prev, [key]: floorData };
-      });
-    },
-    [floor],
-  );
-
-  const handleExportCorrections = useCallback(() => {
-    const data = JSON.stringify(allCorrections, null, 2);
+  const handleExportEdits = useCallback(() => {
+    const data = JSON.stringify(allEdits, null, 2);
     const blob = new Blob([data], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "location-corrections.json";
+    a.download = "warehouse-edits.json";
     a.click();
     URL.revokeObjectURL(url);
-  }, [allCorrections]);
+  }, [allEdits]);
 
-  const handleImportCorrections = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImportEdits = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
       try {
         const data = JSON.parse(reader.result as string);
-        setAllCorrections(data);
+        setAllEdits(data);
       } catch { /* ignore invalid file */ }
     };
     reader.readAsText(file);
     e.target.value = "";
   }, []);
 
-  const locationCount =
-    floor === "9" ? locations9thFloor.length : locations8thFloor.length;
+  const handleMapClick = useCallback(
+    (dxfX: number, dxfY: number) => {
+      if (!editMode || activeTool !== "add") return;
+      const floorPrefix = floor === "9" ? "9" : "8";
+      const timestamp = Date.now().toString(36);
+      const newId = `NEW${floorPrefix}${timestamp}`;
+      handleAddLocation({
+        id: newId,
+        originalLabel: newId,
+        x: dxfX,
+        y: dxfY,
+        rack: "",
+        slot: "",
+        type: "user_added",
+        color: undefined,
+      });
+    },
+    [editMode, activeTool, floor, handleAddLocation],
+  );
+
+  const handleLocationSelect = useCallback(
+    (locationId: string) => {
+      if (editMode && activeTool === "delete") {
+        handleDeleteLocation(locationId);
+        return;
+      }
+      if (editMode && (activeTool === "select" || activeTool === "move")) {
+        setSelectedLocationId((prev) => (prev === locationId ? null : locationId));
+        return;
+      }
+      // Normal mode: highlight toggle
+      setHighlightedLocations((prev) => {
+        const next = new Set(prev);
+        if (next.has(locationId)) {
+          next.delete(locationId);
+        } else {
+          next.add(locationId);
+        }
+        return next;
+      });
+    },
+    [editMode, activeTool, handleDeleteLocation],
+  );
+
+  // Build effective locations for this floor with edits applied
+  const baseLocations = floor === "9" ? locations9thFloor : locations8thFloor;
+  const editCount = useMemo(() => {
+    const e = floorEdits;
+    return Object.keys(e.modified).length + e.added.length + e.deleted.length + Object.keys(e.rackColors).length;
+  }, [floorEdits]);
+
+  // Compute location corrections map from edits (for WarehouseMap compatibility)
+  const locationCorrections = useMemo(() => {
+    const result: Record<string, { x: number; y: number }> = {};
+    for (const [id, mod] of Object.entries(floorEdits.modified)) {
+      if (mod.x !== undefined && mod.y !== undefined) {
+        result[id] = { x: mod.x, y: mod.y };
+      }
+    }
+    return result;
+  }, [floorEdits.modified]);
+
+  const locationCount = useMemo(() => {
+    return baseLocations.length - floorEdits.deleted.length + floorEdits.added.length;
+  }, [baseLocations.length, floorEdits.deleted.length, floorEdits.added.length]);
+
+  // Selected location info
+  const selectedLocationInfo = useMemo(() => {
+    if (!selectedLocationId) return null;
+    // Check added first
+    const added = floorEdits.added.find((a) => a.id === selectedLocationId);
+    if (added) return added;
+    // Check base
+    const base = baseLocations.find((l) => l.id === selectedLocationId);
+    if (!base) return null;
+    const mod = floorEdits.modified[selectedLocationId];
+    return {
+      id: selectedLocationId,
+      originalLabel: mod?.originalLabel ?? base.originalLabel,
+      x: mod?.x ?? base.x,
+      y: mod?.y ?? base.y,
+      rack: mod?.rack ?? base.rack ?? "",
+      slot: mod?.slot ?? base.slot ?? "",
+      type: mod?.type ?? base.type,
+      color: mod?.color,
+    };
+  }, [selectedLocationId, floorEdits, baseLocations]);
+
+  // Collect rack list for rack colors editor
+  const rackList = useMemo(() => {
+    const racks = new Set<string>();
+    for (const loc of baseLocations) {
+      if (loc.rack && !floorEdits.deleted.includes(loc.id)) racks.add(loc.rack);
+    }
+    for (const loc of floorEdits.added) {
+      if (loc.rack) racks.add(loc.rack);
+    }
+    for (const [id, mod] of Object.entries(floorEdits.modified)) {
+      if (mod.rack && !floorEdits.deleted.includes(id)) racks.add(mod.rack);
+    }
+    return [...racks].sort();
+  }, [baseLocations, floorEdits]);
 
   const handleOptimize = useCallback(
     (locationIds: string[]) => {
       const optimized = optimizePickingRoute(locationIds, floor);
       setRoute(optimized);
-
       const sequential = computeSequentialRoute(locationIds, floor);
       setNormalRoute(sequential);
       setShowNormalRoute(false);
@@ -137,18 +343,7 @@ function App() {
     setNormalRoute(null);
     setShowNormalRoute(false);
     setHighlightedLocations(new Set());
-  }, []);
-
-  const handleLocationClick = useCallback((locationId: string) => {
-    setHighlightedLocations((prev) => {
-      const next = new Set(prev);
-      if (next.has(locationId)) {
-        next.delete(locationId);
-      } else {
-        next.add(locationId);
-      }
-      return next;
-    });
+    setSelectedLocationId(null);
   }, []);
 
   const displayRoute = showNormalRoute ? normalRoute : route;
@@ -172,8 +367,14 @@ function App() {
           <button
             type="button"
             className={`app__edit-btn ${editMode ? "app__edit-btn--active" : ""}`}
-            onClick={() => setEditMode((v) => !v)}
-            title="Toggle edit mode to drag locations"
+            onClick={() => {
+              setEditMode((v) => !v);
+              if (editMode) {
+                setSelectedLocationId(null);
+                setActiveTool("select");
+              }
+            }}
+            title="Toggle edit mode"
           >
             {editMode ? "Exit Edit" : "Edit Locations"}
           </button>
@@ -242,45 +443,35 @@ function App() {
           normalRoute={showNormalRoute ? null : normalRoute}
           showNormalRoute={!showNormalRoute && normalRoute !== null && route !== null}
           highlightedLocations={highlightedLocations}
-          onLocationClick={handleLocationClick}
+          onLocationClick={handleLocationSelect}
           editMode={editMode}
-          locationCorrections={floorCorrections}
+          activeTool={activeTool}
+          locationCorrections={locationCorrections}
           onLocationMove={handleLocationMove}
+          deletedLocations={floorEdits.deleted}
+          addedLocations={floorEdits.added}
+          modifiedLocations={floorEdits.modified}
+          rackColors={floorEdits.rackColors}
+          selectedLocationId={selectedLocationId}
+          onMapClick={handleMapClick}
         />
         {editMode && (
-          <div className="app__edit-panel">
-            <h3 className="app__edit-panel-title">Location Editor</h3>
-            <p className="app__edit-panel-hint">
-              Drag any location dot to reposition it. Changes are saved automatically.
-            </p>
-            <p className="app__edit-panel-count">
-              {correctionCount} correction{correctionCount !== 1 ? "s" : ""} on this floor
-            </p>
-            {correctionCount > 0 && (
-              <div className="app__edit-panel-list">
-                {Object.entries(floorCorrections).map(([id]) => (
-                  <div key={id} className="app__edit-panel-item">
-                    <span>{id}</span>
-                    <button type="button" onClick={() => handleResetSingle(id)} className="app__edit-panel-reset-one" title="Reset this location">×</button>
-                  </div>
-                ))}
-              </div>
-            )}
-            <div className="app__edit-panel-actions">
-              {correctionCount > 0 && (
-                <button type="button" className="app__edit-panel-btn app__edit-panel-btn--danger" onClick={handleResetCorrections}>
-                  Reset All
-                </button>
-              )}
-              <button type="button" className="app__edit-panel-btn" onClick={handleExportCorrections}>
-                Export
-              </button>
-              <label className="app__edit-panel-btn app__edit-panel-btn--import">
-                Import
-                <input type="file" accept=".json" onChange={handleImportCorrections} hidden />
-              </label>
-            </div>
-          </div>
+          <LocationEditorPanel
+            activeTool={activeTool}
+            onToolChange={setActiveTool}
+            editCount={editCount}
+            floorEdits={floorEdits}
+            selectedLocation={selectedLocationInfo}
+            onUpdateLocation={handleUpdateLocationProps}
+            onDeleteLocation={handleDeleteLocation}
+            onUndeleteLocation={handleUndeleteLocation}
+            rackList={rackList}
+            rackColors={floorEdits.rackColors}
+            onSetRackColor={handleSetRackColor}
+            onResetAll={handleResetAllEdits}
+            onExport={handleExportEdits}
+            onImport={handleImportEdits}
+          />
         )}
         <PickingPanel
           floor={floor}
