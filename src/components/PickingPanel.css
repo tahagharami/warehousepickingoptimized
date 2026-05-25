@@ -1,6 +1,6 @@
 .picking-panel {
-  width: 280px;
-  min-width: 280px;
+  width: 320px;
+  min-width: 320px;
   display: flex;
   flex-direction: column;
   border-left: 1px solid #e5e7eb;
@@ -15,6 +15,36 @@
   font-weight: 600;
   border-bottom: 1px solid #e5e7eb;
   color: #111827;
+}
+
+/* Tabs */
+.picking-panel__tabs {
+  display: flex;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.picking-panel__tab {
+  flex: 1;
+  padding: 0.5rem;
+  border: none;
+  background: #ffffff;
+  color: #6b7280;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s;
+}
+
+.picking-panel__tab:hover {
+  color: #111827;
+  background: #f3f4f6;
+}
+
+.picking-panel__tab--active {
+  color: #111827;
+  border-bottom-color: #111827;
+  font-weight: 600;
 }
 
 .picking-panel__input-group {
@@ -63,12 +93,17 @@
   cursor: pointer;
 }
 
+.picking-panel__btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .picking-panel__btn--primary {
   background: #111827;
   color: #ffffff;
 }
 
-.picking-panel__btn--primary:hover {
+.picking-panel__btn--primary:hover:not(:disabled) {
   background: #1f2937;
 }
 
@@ -81,6 +116,139 @@
   background: #d1d5db;
 }
 
+.picking-panel__btn--upload {
+  width: 100%;
+  padding: 0.65rem 0.75rem;
+  background: #3b82f6;
+  color: #ffffff;
+  border-radius: 4px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+.picking-panel__btn--upload:hover:not(:disabled) {
+  background: #2563eb;
+}
+
+/* File input hidden */
+.picking-panel__file-input {
+  display: none;
+}
+
+/* PDF file list */
+.picking-panel__pdf-list {
+  margin-top: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.picking-panel__pdf-item {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.5rem;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+  font-size: 0.75rem;
+}
+
+.picking-panel__pdf-name {
+  flex: 1;
+  font-weight: 600;
+  color: #111827;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.picking-panel__pdf-count {
+  color: #6b7280;
+  white-space: nowrap;
+}
+
+.picking-panel__pdf-remove {
+  border: none;
+  background: none;
+  color: #9ca3af;
+  font-size: 0.875rem;
+  cursor: pointer;
+  padding: 0 0.2rem;
+  line-height: 1;
+}
+
+.picking-panel__pdf-remove:hover {
+  color: #dc2626;
+}
+
+/* Summary */
+.picking-panel__summary {
+  margin-top: 0.5rem;
+  font-size: 0.75rem;
+  color: #374151;
+}
+
+.picking-panel__summary p {
+  margin: 0;
+}
+
+.picking-panel__warning {
+  color: #d97706;
+  font-weight: 500;
+}
+
+/* Distance gain comparison */
+.picking-panel__gain {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #e5e7eb;
+  background: #f0fdf4;
+}
+
+.picking-panel__gain-title {
+  margin: 0 0 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #111827;
+}
+
+.picking-panel__gain-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.2rem 0;
+  font-size: 0.75rem;
+}
+
+.picking-panel__gain-row--total {
+  margin-top: 0.3rem;
+  padding-top: 0.4rem;
+  border-top: 1px solid #d1fae5;
+}
+
+.picking-panel__gain-label {
+  color: #374151;
+}
+
+.picking-panel__gain-value {
+  font-family: "SF Mono", "Fira Code", monospace;
+  font-weight: 500;
+}
+
+.picking-panel__gain-value--normal {
+  color: #9ca3af;
+}
+
+.picking-panel__gain-value--optimized {
+  color: #059669;
+}
+
+.picking-panel__gain-value--saved {
+  color: #059669;
+  font-weight: 700;
+}
+
+/* Route section */
 .picking-panel__route {
   flex: 1;
   min-height: 0;
@@ -116,7 +284,7 @@
 .picking-panel__stop {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.4rem;
   padding: 0.35rem 1rem;
   font-size: 0.8125rem;
   border-bottom: 1px solid #f3f4f6;
@@ -143,7 +311,25 @@
   flex-shrink: 0;
 }
 
+.picking-panel__stop-number--warn {
+  background: #d97706;
+}
+
 .picking-panel__stop-id {
   font-family: "SF Mono", "Fira Code", monospace;
   color: #374151;
+  white-space: nowrap;
+}
+
+.picking-panel__stop-item {
+  font-size: 0.6875rem;
+  color: #6b7280;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Unresolved section */
+.picking-panel__unresolved {
+  border-top: 1px solid #e5e7eb;
 }

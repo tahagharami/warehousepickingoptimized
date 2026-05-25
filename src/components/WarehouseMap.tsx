@@ -50,11 +50,20 @@ function getRackColor(rackId: string): string {
 type WarehouseMapProps = {
   floor: WarehouseFloor;
   route: OptimizedRoute | null;
+  normalRoute?: OptimizedRoute | null;
+  showNormalRoute?: boolean;
   highlightedLocations: Set<string>;
   onLocationClick?: (locationId: string) => void;
 };
 
-export function WarehouseMap({ floor, route, highlightedLocations, onLocationClick }: WarehouseMapProps) {
+export function WarehouseMap({
+  floor,
+  route,
+  normalRoute,
+  showNormalRoute,
+  highlightedLocations,
+  onLocationClick,
+}: WarehouseMapProps) {
   const { locations, graph } = getFloorData(floor);
   const svgDims = getFloorSvgDimensions(floor);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -143,20 +152,22 @@ export function WarehouseMap({ floor, route, highlightedLocations, onLocationCli
       .filter((e): e is { from: string; to: string; x1: number; y1: number; x2: number; y2: number } => e !== null);
   }, [graph.edges, navNodes]);
 
-  // Route path in SVG coordinates
-  const routePathPoints = useMemo(() => {
-    if (!route || route.segments.length === 0) return [];
-
-    const allLocMap = new Map<string, { svgX: number; svgY: number }>();
+  // Build combined location map for route rendering
+  const allLocMap = useMemo(() => {
+    const map = new Map<string, { svgX: number; svgY: number }>();
     for (const loc of transformedLocations) {
-      allLocMap.set(loc.id, { svgX: loc.svgX, svgY: loc.svgY });
+      map.set(loc.id, { svgX: loc.svgX, svgY: loc.svgY });
     }
     for (const n of navNodes) {
-      allLocMap.set(n.id, { svgX: n.svgX, svgY: n.svgY });
+      map.set(n.id, { svgX: n.svgX, svgY: n.svgY });
     }
+    return map;
+  }, [transformedLocations, navNodes]);
 
+  // Route path points helper
+  function buildRoutePoints(r: OptimizedRoute): { x: number; y: number }[] {
     const points: { x: number; y: number }[] = [];
-    for (const seg of route.segments) {
+    for (const seg of r.segments) {
       for (let i = 0; i < seg.path.length; i++) {
         const node = allLocMap.get(seg.path[i]);
         if (node) {
@@ -167,15 +178,25 @@ export function WarehouseMap({ floor, route, highlightedLocations, onLocationCli
       }
     }
     return points;
-  }, [route, transformedLocations, navNodes]);
+  }
+
+  // Route path in SVG coordinates
+  const routePathPoints = useMemo(() => {
+    if (!route || route.segments.length === 0) return [];
+    return buildRoutePoints(route);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [route, allLocMap]);
+
+  // Normal route path for ghost overlay
+  const normalRoutePathPoints = useMemo(() => {
+    if (!normalRoute || normalRoute.segments.length === 0) return [];
+    return buildRoutePoints(normalRoute);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [normalRoute, allLocMap]);
 
   // Stop markers for route
   const routeStops = useMemo(() => {
     if (!route) return [];
-    const allLocMap = new Map<string, { svgX: number; svgY: number }>();
-    for (const loc of transformedLocations) {
-      allLocMap.set(loc.id, { svgX: loc.svgX, svgY: loc.svgY });
-    }
     return route.stops
       .map((s) => {
         const coords = allLocMap.get(s.locationId);
@@ -183,7 +204,7 @@ export function WarehouseMap({ floor, route, highlightedLocations, onLocationCli
         return { ...s, svgX: coords.svgX, svgY: coords.svgY };
       })
       .filter((s): s is NonNullable<typeof s> => s !== null);
-  }, [route, transformedLocations]);
+  }, [route, allLocMap]);
 
   const handleLocationClick = useCallback(
     (id: string) => {
@@ -325,7 +346,23 @@ export function WarehouseMap({ floor, route, highlightedLocations, onLocationCli
               })}
             </g>
 
-            {/* Route path */}
+            {/* Normal route ghost path (shown behind optimized) */}
+            {showNormalRoute && normalRoutePathPoints.length > 1 && (
+              <g id="normal-route-path">
+                <polyline
+                  points={normalRoutePathPoints.map((p) => `${p.x},${p.y}`).join(" ")}
+                  fill="none"
+                  stroke="#9ca3af"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  opacity="0.4"
+                  strokeDasharray="4 6"
+                />
+              </g>
+            )}
+
+            {/* Optimized route path */}
             {routePathPoints.length > 1 && (
               <g id="route-path">
                 <polyline

@@ -15,6 +15,7 @@
   padding: 0.75rem 1.25rem;
   border-bottom: 1px solid #e5e7eb;
   background: #ffffff;
+  flex-wrap: wrap;
 }
 
 .app__title-group {
@@ -34,14 +35,24 @@
   color: #6b7280;
 }
 
-.app__floor-toggle {
+.app__controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.app__floor-toggle,
+.app__route-toggle {
   display: inline-flex;
+  align-items: center;
   border: 1px solid #d1d5db;
   border-radius: 4px;
   overflow: hidden;
 }
 
-.app__floor-btn {
+.app__floor-btn,
+.app__route-btn {
   padding: 0.45rem 0.9rem;
   border: none;
   background: #ffffff;
@@ -50,11 +61,13 @@
   cursor: pointer;
 }
 
-.app__floor-btn + .app__floor-btn {
+.app__floor-btn + .app__floor-btn,
+.app__route-btn + .app__route-btn {
   border-left: 1px solid #d1d5db;
 }
 
-.app__floor-btn:hover {
+.app__floor-btn:hover,
+.app__route-btn:hover {
   background: #f9fafb;
 }
 
@@ -65,6 +78,35 @@
 
 .app__floor-btn--active:hover {
   background: #111827;
+}
+
+.app__route-btn--active.app__route-btn--optimized {
+  background: #059669;
+  color: #ffffff;
+}
+
+.app__route-btn--active.app__route-btn--optimized:hover {
+  background: #059669;
+}
+
+.app__route-btn--active.app__route-btn--normal {
+  background: #9ca3af;
+  color: #ffffff;
+}
+
+.app__route-btn--active.app__route-btn--normal:hover {
+  background: #9ca3af;
+}
+
+.app__savings-badge {
+  margin-left: 0.5rem;
+  padding: 0.25rem 0.6rem;
+  background: #d1fae5;
+  color: #065f46;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: 9999px;
+  white-space: nowrap;
 }
 
 .app__main {

@@ -138,3 +138,38 @@ export function optimizePickingRoute(
 
   return { stops, segments, totalDistance };
 }
+
+/**
+ * Compute a sequential (non-optimized) route following the original order.
+ * Used for comparison with the optimized route.
+ */
+export function computeSequentialRoute(
+  locationIds: string[],
+  floor: WarehouseFloor,
+): OptimizedRoute {
+  if (locationIds.length === 0) {
+    return { stops: [], segments: [], totalDistance: 0 };
+  }
+
+  const adj = buildAdjacencyList(floor);
+  const segments: OptimizedRoute["segments"] = [];
+  let totalDistance = 0;
+
+  for (let i = 0; i < locationIds.length - 1; i++) {
+    const result = shortestPath(adj, locationIds[i], locationIds[i + 1]);
+    segments.push({
+      from: locationIds[i],
+      to: locationIds[i + 1],
+      path: result.path,
+      distance: result.distance,
+    });
+    totalDistance += result.distance;
+  }
+
+  const stops = locationIds.map((id, idx) => ({
+    locationId: id,
+    order: idx + 1,
+  }));
+
+  return { stops, segments, totalDistance };
+}
