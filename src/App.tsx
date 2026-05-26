@@ -14,6 +14,16 @@ import {
 import { LocationEditorPanel, type WarehouseEdits, type EditTool, type LocationEdit } from "./components/LocationEditorPanel";
 import "./App.css";
 
+type BaseLocation = {
+  id: string;
+  originalLabel: string;
+  x: number;
+  y: number;
+  type: string;
+  rack?: string;
+  slot?: string;
+};
+
 const EDITS_KEY = "warehouse-location-edits";
 
 function loadEdits(): Record<string, WarehouseEdits> {
@@ -261,7 +271,7 @@ function App() {
   );
 
   // Build effective locations for this floor with edits applied
-  const baseLocations = floor === "9" ? locations9thFloor : locations8thFloor;
+  const baseLocations: readonly BaseLocation[] = floor === "9" ? locations9thFloor : locations8thFloor;
   const editCount = useMemo(() => {
     const e = floorEdits;
     return Object.keys(e.modified).length + e.added.length + e.deleted.length + Object.keys(e.rackColors).length;
